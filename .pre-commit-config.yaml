@@ -1,0 +1,21 @@
+# Pre-commit configuration for SQL validation
+#
+# Installation:
+# 1. Install pre-commit: pip install pre-commit
+# 2. Install hooks: pre-commit install
+#
+# Usage:
+# - Automatically runs on `git commit`
+# - Manually run: pre-commit run --all-files
+# - Skip for emergency: git commit --no-verify
+
+repos:
+  - repo: local
+    hooks:
+      - id: validate-sql-queries
+        name: Validate SQL queries against Prisma schema
+        entry: bash scripts/pre-commit-hook.sh
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+        always_run: false

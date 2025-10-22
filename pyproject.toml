@@ -1,0 +1,28 @@
+[project]
+name = "prisma-validate"
+version = "0.1.0"
+description = "Validate SQL queries against Prisma schema using SQLGlot"
+readme = "README.md"
+authors = [
+    {name = "Alexander Hupfer"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "sqlglot>=25.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]

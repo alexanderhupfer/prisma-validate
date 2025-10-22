@@ -1,0 +1,36 @@
+// Simplified Prisma schema for testing
+// Based on the Job model from bulk-ai/frontend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id             Int       @id @default(autoincrement())
+  jobType        String    @map("job_type")
+  sessionId      String    @map("session_id")
+  chatSessionId  String?   @map("chat_session_id")
+  batchJobName   String    @map("batch_job_name")
+  status         String
+  progress       Int       @default(0)
+  currentStep    String?   @map("current_step")
+  errors         Json      @default("[]")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  completedAt    DateTime? @map("completed_at")
+  version        Int?
+  totalChanges   Int?      @map("total_changes")
+  appliedChanges Int       @default(0) @map("applied_changes")
+  diffGcsPath    String?   @map("diff_gcs_path")
+  totalTasks     Int?      @map("total_tasks")
+  completedTasks Int       @default(0) @map("completed_tasks")
+
+  @@index([sessionId, jobType])
+  @@index([chatSessionId])
+  @@index([status])
+  @@map("job")
+}
