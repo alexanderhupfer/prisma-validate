@@ -81,51 +81,59 @@ Works with **any SQL dialect** supported by SQLGlot:
 
 ## Installation
 
-This is a **development-time tool** for validation. Install it as a dev dependency:
+This is a **development-time tool** for validation. **Two simple steps:**
+
+### Step 1: Install @prisma/internals
+The tool needs this to read your Prisma schema:
 
 ```bash
-uv add --dev prisma-validate
+npm install --save-dev @prisma/internals
 ```
 
-Or with pip:
+### Step 2: Add pre-commit hook
+Add to your `.pre-commit-config.yaml`:
 
-```bash
-pip install --dev prisma-validate
+```yaml
+repos:
+  - repo: https://github.com/alexanderhupfer/prisma-validate
+    rev: v0.2.0
+    hooks:
+      - id: prisma-validate
 ```
+
+**That's it!** The hook will auto-detect your schema location and validate marked SQL queries.
 
 **Note:** This tool is only used during development, pre-commit hooks, and CI/CD. It has zero runtime overhead and should not be installed in production.
 
 ## Quick Start
 
-### 1. Generate DMMF from your Prisma schema
+### Using CLI
 
-First, you need to extract the DMMF (Data Model Meta Format) from your Prisma schema:
+Mark SQL queries you want to validate with a comment:
 
-```javascript
-// generate-dmmf.js
-const { getDMMF } = require('@prisma/internals');
-const fs = require('fs');
-
-const schema = fs.readFileSync('./prisma/schema.prisma', 'utf-8');
-
-getDMMF({ datamodel: schema }).then(dmmf => {
-  fs.writeFileSync('prisma-dmmf.json', JSON.stringify(dmmf, null, 2));
-  console.log('DMMF generated successfully!');
-});
+```python
+# prisma-validate
+cursor.execute("SELECT id, status FROM jobs WHERE id = %s", (job_id,))
 ```
 
-Run it:
+Run validation:
+
 ```bash
-npm install --save-dev @prisma/internals
-node generate-dmmf.js
+# Auto-detects schema location
+prisma-validate backend/tasks/*.py
+
+# Or specify schema path explicitly
+prisma-validate --schema-path prisma/schema.prisma backend/**/*.py
 ```
 
-### 2. Validate your SQL queries
+### Using as Python Library
+
+You can also import and use programmatically:
 
 ```python
 from prisma_validate import load_dmmf, convert_dmmf_to_sqlglot, validate_query
 
-# Load the DMMF
+# Load from DMMF JSON (if you have one pre-generated)
 dmmf = load_dmmf('prisma-dmmf.json')
 schema = convert_dmmf_to_sqlglot(dmmf)
 
@@ -141,9 +149,9 @@ else:
     print("Query is valid!")
 ```
 
-### 3. Auto-Detect SQL Dialect (Recommended)
+### Auto-Detect SQL Dialect
 
-The validator can automatically detect the correct SQL dialect from your Prisma schema:
+The validator automatically detects the correct SQL dialect from your Prisma schema:
 
 ```python
 from prisma_validate import detect_dialect_from_schema, validate_query
@@ -162,7 +170,7 @@ errors = validate_query(query, schema, dialect=dialect)
 - `provider = "sqlserver"` → `tsql`
 - `provider = "cockroachdb"` → `postgres`
 
-### 4. Or Manually Specify Dialect
+### Manually Specify Dialect
 
 You can also specify dialects manually:
 
@@ -177,7 +185,7 @@ errors = validate_query(query, schema, dialect="tsql")
 errors = validate_query(query, schema, dialect="bigquery")
 ```
 
-### 5. Use strict mode for CI/CD
+### Use strict mode for CI/CD
 
 ```python
 from prisma_validate import validate_query_strict, ValidationError
@@ -234,19 +242,38 @@ print(errors)
 
 ## Integration Options
 
-### Pre-commit Hook
+### Pre-commit Hook (Recommended)
 
-Add to `.pre-commit-config.yaml`:
+The easiest way is to reference the GitHub repository directly:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/alexanderhupfer/prisma-validate
+    rev: v0.2.0
+    hooks:
+      - id: prisma-validate
+        # Optional: specify schema path if not in standard location
+        # args: ['--schema-path=path/to/schema.prisma']
+```
+
+Then install the hooks:
+
+```bash
+pre-commit install
+```
+
+### Custom Schema Location
+
+If your schema is in a non-standard location:
 
 ```yaml
 repos:
-  - repo: local
+  - repo: https://github.com/alexanderhupfer/prisma-validate
+    rev: v0.2.0
     hooks:
-      - id: validate-sql
-        name: Validate SQL queries
-        entry: python scripts/validate_sql.py
-        language: python
-        files: '\.py$'
+      - id: prisma-validate
+        args: ['--schema-path=custom/path/schema.prisma']
 ```
 
 ### CI/CD Pipeline
@@ -262,14 +289,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Generate DMMF
-        run: |
-          npm install @prisma/internals
-          node scripts/generate-dmmf.js
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install @prisma/internals
+        run: npm install --save-dev @prisma/internals
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install prisma-validate
+        run: pip install git+https://github.com/alexanderhupfer/prisma-validate.git@v0.2.0
+
       - name: Validate SQL queries
-        run: |
-          pip install prisma-validate
-          python scripts/validate_all_sql.py
+        run: prisma-validate backend/**/*.py
 ```
 
 ### Pytest Integration
@@ -295,6 +333,39 @@ def test_job_queries(schema):
     for query in queries:
         validate_query_strict(query, schema)  # Raises if invalid
 ```
+
+## CLI Reference
+
+### Basic Usage
+
+```bash
+# Validate specific files
+prisma-validate file1.py file2.py
+
+# Validate with glob patterns
+prisma-validate backend/tasks/*.py
+
+# Specify custom schema location
+prisma-validate --schema-path prisma/schema.prisma backend/**/*.py
+```
+
+### Options
+
+- `files`: Python files to validate (required, supports multiple files)
+- `--schema-path PATH`: Path to schema.prisma (optional, auto-detects if not provided)
+
+### Schema Auto-Detection
+
+If `--schema-path` is not provided, searches these locations in order:
+1. `./prisma/schema.prisma`
+2. `./frontend/prisma/schema.prisma`
+3. `./backend/prisma/schema.prisma`
+4. `../prisma/schema.prisma`
+
+### Exit Codes
+
+- `0`: All queries valid
+- `1`: Validation errors found or setup error
 
 ## API Reference
 

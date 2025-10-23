@@ -57,3 +57,7 @@ dmypy.json
 
 # UV
 uv.lock
+
+# Node.js (for @prisma/internals during development)
+node_modules/
+package-lock.json

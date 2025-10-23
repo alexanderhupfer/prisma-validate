@@ -1,0 +1,11 @@
+# Pre-commit hooks configuration for prisma-validate
+# See https://pre-commit.com for more information
+
+- id: prisma-validate
+  name: Validate SQL queries against Prisma schema
+  description: Validates SQL queries marked with # prisma-validate against Prisma schema
+  entry: prisma-validate
+  language: python
+  files: \.py$
+  require_serial: true
+  additional_dependencies: []
