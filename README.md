@@ -37,17 +37,28 @@ This tool uses Prisma's official Data Model Meta Format (DMMF) to validate SQL q
 - **SQL syntax errors** - catches some syntax errors (keyword typos, missing closing parens, unclosed strings)
 
 ### ❌ Not Validated
-- **Data types** - Type mismatches (e.g., inserting string into integer column)
-- **Constraints** - NOT NULL, FOREIGN KEY, UNIQUE, CHECK constraints
-- **Column names in `INSERT`/`UPDATE` SET clauses** - SQLGlot's `qualify()` function doesn't validate these (by design, it only qualifies column references in SELECT/WHERE/JOIN)
-- **Runtime values** - Cannot validate actual data values
-- **Database-specific functions** - Custom functions, stored procedures
-- **All syntax errors** - Catches major syntax errors (typos, unclosed strings) but not all (missing commas, etc.)
 
-**Why the INSERT/UPDATE limitation is acceptable:**
-- Most schema mismatch bugs occur in complex `SELECT` queries with JOINs (which ARE validated)
+**Column Validation Limitations:**
+- **INSERT/UPDATE column names** - SQLGlot's `qualify()` function doesn't validate column names in INSERT column lists or UPDATE SET clauses by design (it only qualifies column references in SELECT/WHERE/JOIN/ORDER BY/GROUP BY)
+
+**Type & Constraint Validation:**
+- **Data types** - Type mismatches not detected (e.g., inserting string into integer column)
+- **Constraints** - NOT NULL, FOREIGN KEY, UNIQUE, CHECK constraints not validated
+- **Runtime values** - Cannot validate actual data values or expressions
+
+**SQL Features:**
+- **Database-specific functions** - Custom functions, stored procedures not recognized
+- **Views & materialized views** - Not yet supported
+- **Computed columns** - Complex computed columns may not be validated correctly
+- **Dynamic SQL** - String concatenation or dynamically built queries cannot be validated
+
+**Syntax Validation:**
+- **Partial syntax checking** - Catches major syntax errors (keyword typos, unclosed strings, missing parens) but not all (e.g., missing commas may be tolerated)
+
+**Why these limitations are acceptable:**
+- Most schema mismatch bugs occur in complex `SELECT` queries with JOINs (which **ARE** validated)
 - `INSERT`/`UPDATE` column errors are typically caught quickly in unit/integration tests
-- The tool focuses on the 80% case: catching table/column name mismatches in read queries
+- The tool focuses on the 80% case: catching **table/column name mismatches** in read queries
 - You can still validate that `INSERT`/`UPDATE` reference the correct **tables**
 
 ## Supported Databases
@@ -423,10 +434,16 @@ Raises: `ValidationError` with details if query is invalid
 
 ## Limitations
 
-- Relations are not validated (only scalar fields)
-- Complex computed columns may not be supported
-- Database-specific functions are not validated
-- Views and materialized views are not supported yet
+See the **"What Gets Validated"** section at the top for a comprehensive list of what is and isn't validated.
+
+**Key limitations:**
+- INSERT/UPDATE column names not validated (by design)
+- Data types and constraints not checked
+- Relations, views, and database-specific functions not validated
+
+**Workarounds:**
+- Rely on unit/integration tests for INSERT/UPDATE validation
+- The tool focuses on catching table/column name mismatches in SELECT queries (the 80% case)
 
 ## Development
 

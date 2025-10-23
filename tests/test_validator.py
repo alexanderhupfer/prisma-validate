@@ -127,3 +127,87 @@ def test_catches_apply_jobs_bug(schema):
     correct_query = "SELECT diff_gcs_path FROM jobs WHERE id = %s"
     errors = validate_query(correct_query, schema)
     assert len(errors) == 0
+
+
+def test_mixed_quoting_auto_fix(schema):
+    """
+    Test that mixed quoted/unquoted identifiers are auto-fixed.
+
+    PostgreSQL case rules:
+    - Unquoted identifiers are lowercased (email -> email)
+    - Quoted identifiers preserve case ("firstName" -> firstName)
+
+    Before auto-fix: SQLGlot validation would fail with mixed quoting
+    After auto-fix: All identifiers are quoted consistently
+    """
+    # Query with mixed quoting (like email_utils.py:80)
+    mixed_query = """
+        SELECT shop, "firstName", "lastName"
+        FROM "Session"
+        WHERE shop = %s
+          AND "isOnline" = true
+    """
+    errors = validate_query(mixed_query, schema)
+
+    # Should pass due to auto-fix (quotes all identifiers)
+    assert len(errors) == 0
+
+
+def test_all_quoted_identifiers(schema):
+    """Test that queries with all quoted identifiers work correctly."""
+    query = """
+        SELECT "shop", "firstName", "lastName"
+        FROM "Session"
+        WHERE "shop" = %s
+    """
+    errors = validate_query(query, schema)
+    assert len(errors) == 0
+
+
+def test_all_unquoted_identifiers(schema):
+    """Test that queries with all unquoted identifiers work correctly."""
+    # Note: Lowercase columns like 'id', 'shop', 'state' work unquoted
+    query = """
+        SELECT id, shop, state
+        FROM "Session"
+        WHERE shop = %s
+    """
+    errors = validate_query(query, schema)
+    assert len(errors) == 0
+
+
+def test_mixed_quoting_in_where_clause(schema):
+    """Test mixed quoting in WHERE clause with complex conditions."""
+    query = """
+        SELECT "firstName"
+        FROM "Session"
+        WHERE shop = %s
+          AND "isOnline" = true
+          AND "firstName" IS NOT NULL
+    """
+    errors = validate_query(query, schema)
+    assert len(errors) == 0
+
+
+def test_mixed_quoting_in_order_by(schema):
+    """Test mixed quoting in ORDER BY clause."""
+    query = """
+        SELECT shop, "firstName"
+        FROM "Session"
+        WHERE shop = %s
+        ORDER BY "firstName", shop
+    """
+    errors = validate_query(query, schema)
+    assert len(errors) == 0
+
+
+def test_mixed_quoting_with_joins(schema):
+    """Test mixed quoting in JOIN conditions."""
+    query = """
+        SELECT s1.shop, s1."firstName", s2."lastName"
+        FROM "Session" s1
+        JOIN "Session" s2 ON s1.shop = s2.shop
+        WHERE s1."isOnline" = true
+    """
+    errors = validate_query(query, schema)
+    assert len(errors) == 0

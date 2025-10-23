@@ -2,7 +2,7 @@
 Validate SQL queries against Prisma-derived schema using SQLGlot.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import sqlglot
 from sqlglot.optimizer.qualify import qualify
 
@@ -11,6 +11,86 @@ class ValidationError(Exception):
     """Raised when SQL query validation fails."""
 
     pass
+
+
+def has_quoted_identifiers(ast) -> Tuple[bool, bool, List[str], List[str]]:
+    """
+    Detect if query has any quoted identifiers or mixed quoting.
+
+    Args:
+        ast: SQLGlot AST
+
+    Returns:
+        (has_any_quoted, has_mixed, quoted_identifiers, unquoted_identifiers)
+    """
+    quoted_ids = []
+    unquoted_ids = []
+
+    # Check columns
+    for col in ast.find_all(sqlglot.exp.Column):
+        if col.this.quoted:
+            quoted_ids.append(f'column:{col.name}')
+        else:
+            unquoted_ids.append(f'column:{col.name}')
+
+    # Check tables
+    for table in ast.find_all(sqlglot.exp.Table):
+        if table.this.quoted:
+            quoted_ids.append(f'table:{table.name}')
+        else:
+            unquoted_ids.append(f'table:{table.name}')
+
+    has_any_quoted = bool(quoted_ids)
+    has_mixed = bool(quoted_ids and unquoted_ids)
+    return has_any_quoted, has_mixed, quoted_ids, unquoted_ids
+
+
+def quote_all_identifiers(ast):
+    """
+    Quote all column and table identifiers in AST.
+
+    Modifies AST in place to ensure consistent quoting.
+    This helps SQLGlot's qualify() function work correctly
+    with camelCase schemas.
+
+    Args:
+        ast: SQLGlot AST (modified in place)
+    """
+    # Quote all columns
+    for col in ast.find_all(sqlglot.exp.Column):
+        if not col.this.quoted:
+            col.this.set('quoted', True)
+
+    # Quote all tables
+    for table in ast.find_all(sqlglot.exp.Table):
+        if not table.this.quoted:
+            table.this.set('quoted', True)
+
+
+def quote_schema(schema: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    """
+    Add quotes to all table and column names in schema.
+
+    Converts:
+        {'Session': {'email': 'TEXT', 'firstName': 'TEXT'}}
+    To:
+        {'"Session"': {'"email"': 'TEXT', '"firstName"': 'TEXT'}}
+
+    This makes schema compatible with quoted identifiers in queries.
+
+    Args:
+        schema: Original SQLGlot schema dict
+
+    Returns:
+        Schema with quoted keys
+    """
+    quoted_schema = {}
+    for table_name, columns in schema.items():
+        quoted_table = f'"{table_name}"'
+        quoted_schema[quoted_table] = {
+            f'"{col}"': typ for col, typ in columns.items()
+        }
+    return quoted_schema
 
 
 def validate_query(
@@ -61,9 +141,10 @@ def validate_query(
         ast = sqlglot.parse_one(normalized_query, dialect=dialect)
 
         # Extract table names from the query
+        # Preserve case for case-sensitive databases (PostgreSQL with quoted identifiers)
         referenced_tables = set()
         for table in ast.find_all(sqlglot.exp.Table):
-            table_name = table.name.lower()
+            table_name = table.name  # Don't lowercase - preserve case
             referenced_tables.add(table_name)
 
         # Check if all referenced tables exist in schema
@@ -71,10 +152,24 @@ def validate_query(
             if table_name not in schema:
                 errors.append(f'Table "{table_name}" not found in schema')
 
+        # Handle quoted identifiers (auto-fix)
+        # When any identifier is quoted, we need to:
+        # 1. Quote ALL identifiers in the AST for consistency
+        # 2. Quote the schema keys to match
+        # This ensures SQLGlot's qualify() works with camelCase schemas
+        has_quoted, has_mixed, quoted_ids, unquoted_ids = has_quoted_identifiers(ast)
+        validation_schema = schema
+
+        if has_quoted:
+            # Auto-fix: quote all identifiers to ensure consistency
+            quote_all_identifiers(ast)
+            # Also quote the schema keys to match
+            validation_schema = quote_schema(schema)
+
         # Only run qualify if tables exist (to validate columns)
         if not errors:
             try:
-                qualify(ast, schema=schema, dialect=dialect)
+                qualify(ast, schema=validation_schema, dialect=dialect)
             except Exception as e:
                 # Extract meaningful error message
                 error_msg = str(e)
