@@ -96,7 +96,7 @@ Add to your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/alexanderhupfer/prisma-validate
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: prisma-validate
 ```
@@ -109,11 +109,22 @@ repos:
 
 ### Using CLI
 
-Mark SQL queries you want to validate with a comment:
+Mark SQL queries you want to validate with a SQL comment:
 
 ```python
-# prisma-validate
-cursor.execute("SELECT id, status FROM jobs WHERE id = %s", (job_id,))
+cursor.execute("""
+    -- prisma-validate
+    SELECT id, status FROM jobs WHERE id = %s
+""", (job_id,))
+```
+
+Or use block comments:
+
+```python
+cursor.execute("""
+    /* prisma-validate */
+    SELECT id, status FROM jobs WHERE id = %s
+""", (job_id,))
 ```
 
 Run validation:
@@ -250,7 +261,7 @@ The easiest way is to reference the GitHub repository directly:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/alexanderhupfer/prisma-validate
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: prisma-validate
         # Optional: specify schema path if not in standard location
@@ -270,7 +281,7 @@ If your schema is in a non-standard location:
 ```yaml
 repos:
   - repo: https://github.com/alexanderhupfer/prisma-validate
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: prisma-validate
         args: ['--schema-path=custom/path/schema.prisma']
@@ -304,7 +315,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install prisma-validate
-        run: pip install git+https://github.com/alexanderhupfer/prisma-validate.git@v0.2.0
+        run: pip install git+https://github.com/alexanderhupfer/prisma-validate.git@v0.3.0
 
       - name: Validate SQL queries
         run: prisma-validate backend/**/*.py

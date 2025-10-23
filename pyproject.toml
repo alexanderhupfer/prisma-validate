@@ -1,6 +1,6 @@
 [project]
 name = "prisma-validate"
-version = "0.2.0"
+version = "0.3.0"
 description = "Validate SQL queries against Prisma schema using SQLGlot"
 readme = "README.md"
 authors = [

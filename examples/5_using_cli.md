@@ -44,25 +44,29 @@ By default, the CLI searches these locations automatically:
 
 ## Marking Queries for Validation
 
-Add a comment before the SQL query you want to validate:
+Add a SQL comment inside the query you want to validate:
 
 ```python
 # In your Python file (e.g., backend/tasks/my_task.py):
 
-# prisma-validate
-cursor.execute("SELECT id, status FROM jobs WHERE id = %s", (job_id,))
+cursor.execute("""
+    -- prisma-validate
+    SELECT id, status FROM jobs WHERE id = %s
+""", (job_id,))
 
 # This query won't be validated (no marker):
 bigquery_client.query("SELECT * FROM analytics.sales")
 
-# This will be validated:
-# prisma-validate
+# This will be validated (using block comment):
 cursor.execute("""
+    /* prisma-validate */
     SELECT j.id, j.status, j.progress
     FROM jobs j
     WHERE j.id = %s
 """, (job_id,))
 ```
+
+**Language-agnostic**: SQL comments work in any language (Python, Go, Rust, Java, etc.)!
 
 ## Output Format
 
@@ -118,7 +122,7 @@ The recommended way to use the CLI is through pre-commit hooks:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/alexanderhupfer/prisma-validate
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: prisma-validate
 ```
@@ -197,8 +201,8 @@ def update_job_status(job_id: int, status: str):
 
     try:
         # Validate this query against Prisma schema
-        # prisma-validate
         cursor.execute("""
+            -- prisma-validate
             UPDATE jobs
             SET status = %s, updated_at = NOW()
             WHERE id = %s

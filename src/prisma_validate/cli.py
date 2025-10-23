@@ -109,7 +109,11 @@ getDMMF({ datamodel: schema }).then(dmmf => {
 
 def extract_sql_queries(file_path: Path) -> List[Tuple[str, int]]:
     """
-    Extract SQL queries marked with validation comments.
+    Extract SQL queries marked with SQL comments.
+
+    Looks for SQL queries containing:
+    - -- prisma-validate (SQL line comment)
+    - /* prisma-validate */ (SQL block comment)
 
     Args:
         file_path: Path to Python file
@@ -118,55 +122,51 @@ def extract_sql_queries(file_path: Path) -> List[Tuple[str, int]]:
         List of (query, line_number) tuples
     """
     queries = []
-    validation_markers = ['# prisma-validate', '# validate-sql']
+    sql_markers = ['-- prisma-validate', '/* prisma-validate */']
 
     try:
         with open(file_path, 'r') as f:
-            lines = f.readlines()
+            content = f.read()
     except Exception as e:
         print(f"⚠️  Warning: Could not read {file_path}: {e}", file=sys.stderr)
         return queries
 
-    validate_next = False
+    # Find all cursor.execute() calls with triple-quoted strings
+    # Pattern: cursor.execute(""" ... """, ...)
+    triple_quote_pattern = r'cursor\.execute\s*\(\s*"""(.*?)"""\s*[,\)]'
+    for match in re.finditer(triple_quote_pattern, content, re.DOTALL):
+        query = match.group(1).strip()
+        # Check if query contains validation marker
+        if any(marker in query for marker in sql_markers):
+            # Find line number
+            line_num = content[:match.start()].count('\n') + 1
+            # Remove the marker from the query for validation
+            clean_query = query
+            for marker in sql_markers:
+                clean_query = clean_query.replace(marker, '').strip()
+            queries.append((clean_query, line_num))
 
-    for i, line in enumerate(lines, start=1):
-        stripped = line.strip()
+    # Also check single-quoted triple strings
+    single_quote_pattern = r"cursor\.execute\s*\(\s*'''(.*?)'''\s*[,\)]"
+    for match in re.finditer(single_quote_pattern, content, re.DOTALL):
+        query = match.group(1).strip()
+        if any(marker in query for marker in sql_markers):
+            line_num = content[:match.start()].count('\n') + 1
+            clean_query = query
+            for marker in sql_markers:
+                clean_query = clean_query.replace(marker, '').strip()
+            queries.append((clean_query, line_num))
 
-        # Check for validation marker
-        if any(stripped.startswith(marker) for marker in validation_markers):
-            validate_next = True
-            continue
-
-        # Skip if not marked
-        if not validate_next:
-            continue
-
-        # Reset marker
-        validate_next = False
-
-        # Extract from cursor.execute()
-        cursor_match = re.search(r'cursor\.execute\s*\(\s*["\']([^"\']+)["\']', line)
-        if cursor_match:
-            query = cursor_match.group(1)
-            queries.append((query, i))
-            continue
-
-        # Extract from triple-quoted strings
-        if '"""' in line or "'''" in line:
-            quote_type = '"""' if '"""' in line else "'''"
-            query_lines = [line.split(quote_type, 1)[1]]
-
-            # Continue reading until closing quote
-            for j in range(i, len(lines)):
-                if quote_type in lines[j] and j != i - 1:
-                    query_lines.append(lines[j].split(quote_type)[0])
-                    break
-                elif j != i - 1:
-                    query_lines.append(lines[j])
-
-            query = ''.join(query_lines).strip()
-            if query:
-                queries.append((query, i))
+    # Also check single-line string queries
+    single_line_pattern = r'cursor\.execute\s*\(\s*["\']([^"\']+)["\']\s*[,\)]'
+    for match in re.finditer(single_line_pattern, content):
+        query = match.group(1).strip()
+        if any(marker in query for marker in sql_markers):
+            line_num = content[:match.start()].count('\n') + 1
+            clean_query = query
+            for marker in sql_markers:
+                clean_query = clean_query.replace(marker, '').strip()
+            queries.append((clean_query, line_num))
 
     return queries
 
@@ -181,9 +181,11 @@ Examples:
   prisma-validate backend/tasks/*.py
   prisma-validate --schema-path prisma/schema.prisma file.py
 
-Mark queries for validation with:
-  # prisma-validate
-  cursor.execute("SELECT * FROM jobs WHERE id = %s", (id,))
+Mark queries for validation with SQL comments:
+  cursor.execute(\"\"\"
+      -- prisma-validate
+      SELECT * FROM jobs WHERE id = %s
+  \"\"\", (id,))
         """
     )
 
