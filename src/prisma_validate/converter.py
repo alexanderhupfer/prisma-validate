@@ -64,8 +64,8 @@ def convert_dmmf_to_sqlglot(dmmf: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
 
     for model in models:
         # Get table name (use dbName if specified, otherwise use model name)
+        # Preserve case-sensitivity for PostgreSQL quoted identifiers
         table_name = model.get("dbName") or model["name"]
-        table_name = table_name.lower()
 
         schema[table_name] = {}
 
